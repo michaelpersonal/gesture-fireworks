@@ -4,6 +4,8 @@ Create stunning fireworks with hand gestures using your webcam! Features real-ti
 
 **Pinch your fingers to charge, release to launch!**
 
+## 🚀 [Live Demo](https://michaelguo.vercel.app/fireworks/)
+
 ![Demo](https://img.shields.io/badge/demo-live-brightgreen) ![JavaScript](https://img.shields.io/badge/javascript-vanilla-yellow) ![MediaPipe](https://img.shields.io/badge/mediapipe-hands-blue)
 
 ## ✨ Features
