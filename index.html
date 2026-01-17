@@ -165,7 +165,7 @@
                 <span class="status-indicator waiting"></span>
                 Right hand: Waiting
             </div>
-            <div class="hint">Pinch & release OR swipe up to launch fireworks</div>
+            <div class="hint">Left hand: rocket launch 🚀 | Right hand: instant burst 💥</div>
         </div>
 
         <div id="error-message">
@@ -501,24 +501,55 @@
                 return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
             }
 
-            // Launch a rocket that will fly up and explode
-            launchRocket(x, y, velocity) {
+            // Launch a rocket from the ground that flies up and explodes
+            launchGroundRocket(targetX, canvasHeight) {
                 const palette = this.palettes[Math.floor(Math.random() * this.palettes.length)];
                 const colorHex = palette[Math.floor(Math.random() * palette.length)];
                 
+                // Start from bottom of screen
+                const startX = targetX + (Math.random() - 0.5) * 100;
+                const startY = canvasHeight - 20;
+                
+                // Calculate where to explode (upper portion of screen)
+                const explodeY = 100 + Math.random() * (canvasHeight * 0.3);
+                
                 this.rockets.push({
-                    x: x,
-                    y: y,
-                    vx: (Math.random() - 0.5) * 2, // Slight horizontal wobble
-                    vy: -12 - velocity * 100,      // Strong upward velocity
+                    x: startX,
+                    y: startY,
+                    vx: (Math.random() - 0.5) * 1.5,
+                    vy: -14 - Math.random() * 4,  // Strong upward velocity
                     color: colorHex,
                     colorRgb: this.hexToRgb(colorHex),
                     palette: palette,
-                    size: 4,
+                    size: 5,
                     life: 1,
-                    explodeHeight: y - (150 + Math.random() * 200), // Explode at this Y
-                    trail: []
+                    explodeHeight: explodeY,
+                    trail: [],
+                    phase: 'ignition',  // phases: ignition -> launch -> ascending
+                    ignitionTime: 30,   // frames to show ignition sparks
+                    launched: false
                 });
+                
+                // Create ignition sparks at launch point
+                this.createIgnitionSparks(startX, startY, colorHex);
+            }
+            
+            // Create sparks at the ignition point
+            createIgnitionSparks(x, y, colorHex) {
+                const colorRgb = this.hexToRgb(colorHex);
+                for (let i = 0; i < 30; i++) {
+                    this.sparkles.push({
+                        x: x + (Math.random() - 0.5) * 20,
+                        y: y + Math.random() * 10,
+                        vx: (Math.random() - 0.5) * 3,
+                        vy: -Math.random() * 2,
+                        colorRgb: { r: 255, g: 200 + Math.random() * 55, b: 50 }, // Orange/yellow sparks
+                        size: 2 + Math.random() * 2,
+                        life: 0.5 + Math.random() * 0.5,
+                        decay: 0.03 + Math.random() * 0.02,
+                        gravity: 0.05
+                    });
+                }
             }
 
             createFirework(x, y, charge, customPalette = null) {
@@ -607,30 +638,69 @@
                 for (let i = this.rockets.length - 1; i >= 0; i--) {
                     const r = this.rockets[i];
                     
-                    // Add trail
+                    // Handle ignition phase
+                    if (r.phase === 'ignition') {
+                        r.ignitionTime--;
+                        // Add more ignition sparks
+                        if (r.ignitionTime > 0 && Math.random() > 0.5) {
+                            this.sparkles.push({
+                                x: r.x + (Math.random() - 0.5) * 15,
+                                y: r.y + Math.random() * 5,
+                                vx: (Math.random() - 0.5) * 2,
+                                vy: -Math.random() * 1.5,
+                                colorRgb: { r: 255, g: 150 + Math.random() * 105, b: 0 },
+                                size: 1 + Math.random() * 2,
+                                life: 0.3 + Math.random() * 0.3,
+                                decay: 0.05,
+                                gravity: 0.02
+                            });
+                        }
+                        if (r.ignitionTime <= 0) {
+                            r.phase = 'ascending';
+                            r.launched = true;
+                        }
+                        continue; // Don't move during ignition
+                    }
+                    
+                    // Add trail while ascending
                     r.trail.push({ x: r.x, y: r.y, life: 1 });
-                    if (r.trail.length > 15) r.trail.shift();
+                    if (r.trail.length > 20) r.trail.shift();
                     
                     // Update trail life
                     for (const t of r.trail) {
-                        t.life -= 0.1;
+                        t.life -= 0.08;
                     }
                     r.trail = r.trail.filter(t => t.life > 0);
+                    
+                    // Add rocket exhaust sparks
+                    if (Math.random() > 0.3) {
+                        this.sparkles.push({
+                            x: r.x + (Math.random() - 0.5) * 6,
+                            y: r.y + 5,
+                            vx: (Math.random() - 0.5) * 2,
+                            vy: 2 + Math.random() * 3,
+                            colorRgb: { r: 255, g: 200 + Math.random() * 55, b: 100 },
+                            size: 1 + Math.random() * 2,
+                            life: 0.3 + Math.random() * 0.2,
+                            decay: 0.05,
+                            gravity: 0.1
+                        });
+                    }
                     
                     // Update position
                     r.x += r.vx;
                     r.y += r.vy;
-                    r.vy += 0.15; // Gravity slows the rocket
+                    r.vy += 0.12; // Gravity slows the rocket
                     
-                    // Check if rocket should explode
-                    if (r.y <= r.explodeHeight || r.vy >= 0) {
+                    // Check if rocket should explode (reached peak or target height)
+                    if (r.y <= r.explodeHeight || r.vy >= -2) {
                         // Explode!
-                        this.createFirework(r.x, r.y, 0.8, r.palette);
+                        this.createFirework(r.x, r.y, 1.0, r.palette);
                         this.rockets.splice(i, 1);
                         continue;
                     }
                     
-                    r.life -= 0.005;
+                    r.life -= 0.003;
                     if (r.life <= 0) {
                         this.rockets.splice(i, 1);
                     }
@@ -706,25 +776,46 @@
 
                 // Draw rockets and their trails
                 for (const r of this.rockets) {
-                    // Draw rocket trail
+                    // During ignition phase, draw the fuse/base
+                    if (r.phase === 'ignition') {
+                        // Draw ignition glow at base
+                        const glowGradient = ctx.createRadialGradient(r.x, r.y, 0, r.x, r.y, 30);
+                        glowGradient.addColorStop(0, 'rgba(255, 200, 50, 0.8)');
+                        glowGradient.addColorStop(0.5, 'rgba(255, 100, 0, 0.4)');
+                        glowGradient.addColorStop(1, 'rgba(255, 50, 0, 0)');
+                        ctx.fillStyle = glowGradient;
+                        ctx.beginPath();
+                        ctx.arc(r.x, r.y, 30, 0, Math.PI * 2);
+                        ctx.fill();
+                        
+                        // Draw rocket body waiting to launch
+                        ctx.fillStyle = r.color;
+                        ctx.beginPath();
+                        ctx.ellipse(r.x, r.y - 10, 4, 12, 0, 0, Math.PI * 2);
+                        ctx.fill();
+                        continue;
+                    }
+                    
+                    // Draw rocket trail (ascending phase)
                     for (let i = 0; i < r.trail.length; i++) {
                         const t = r.trail[i];
-                        const alpha = t.life * 0.8;
-                        const size = 3 * (i / r.trail.length);
+                        const alpha = t.life * 0.9;
+                        const size = 2 + 4 * (i / r.trail.length);
                         ctx.fillStyle = this.rgbaString(r.colorRgb, alpha);
                         ctx.beginPath();
                         ctx.arc(t.x, t.y, size, 0, Math.PI * 2);
                         ctx.fill();
                     }
                     
-                    // Draw rocket head with glow
-                    const gradient = ctx.createRadialGradient(r.x, r.y, 0, r.x, r.y, r.size * 3);
-                    gradient.addColorStop(0, this.rgbaString({r: 255, g: 255, b: 255}, 1));
-                    gradient.addColorStop(0.3, this.rgbaString(r.colorRgb, 0.8));
-                    gradient.addColorStop(1, this.rgbaString(r.colorRgb, 0));
+                    // Draw rocket head with bright glow
+                    const gradient = ctx.createRadialGradient(r.x, r.y, 0, r.x, r.y, r.size * 4);
+                    gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+                    gradient.addColorStop(0.2, this.rgbaString(r.colorRgb, 0.9));
+                    gradient.addColorStop(0.6, this.rgbaString(r.colorRgb, 0.4));
+                    gradient.addColorStop(1, 'rgba(255, 100, 0, 0)');
                     ctx.fillStyle = gradient;
                     ctx.beginPath();
-                    ctx.arc(r.x, r.y, r.size * 3, 0, Math.PI * 2);
+                    ctx.arc(r.x, r.y, r.size * 4, 0, Math.PI * 2);
                     ctx.fill();
                 }
 
@@ -1239,14 +1330,21 @@
                 for (const event of events) {
                     if (event.type === 'firework') {
                         const canvasPos = this.renderer.convertLandmarkToCanvas(event.position);
-                        this.particleSystem.createFirework(canvasPos.x, canvasPos.y, event.charge);
-                        this.audioManager.playExplosion(event.charge);
+                        
+                        if (event.hand === 'left') {
+                            // Left hand: Launch a ground rocket
+                            this.particleSystem.launchGroundRocket(canvasPos.x, this.canvas.height);
+                            this.audioManager.playExplosion(0.2); // Soft ignition sound
+                        } else {
+                            // Right hand: Instant explosion at hand
+                            this.particleSystem.createFirework(canvasPos.x, canvasPos.y, event.charge);
+                            this.audioManager.playExplosion(event.charge);
+                        }
                     } else if (event.type === 'launch') {
-                        // Launch a rocket from hand position
+                        // Swipe-up launch (keeping this as backup)
                         const canvasPos = this.renderer.convertLandmarkToCanvas(event.position);
-                        this.particleSystem.launchRocket(canvasPos.x, canvasPos.y, event.velocity);
-                        // Play a softer launch sound
-                        this.audioManager.playExplosion(0.3);
+                        this.particleSystem.launchGroundRocket(canvasPos.x, this.canvas.height);
+                        this.audioManager.playExplosion(0.2);
                     }
                 }
 
