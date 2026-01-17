@@ -221,8 +221,8 @@
                 this.hands.setOptions({
                     maxNumHands: 2,
                     modelComplexity: 1,
-                    minDetectionConfidence: 0.7,
-                    minTrackingConfidence: 0.5
+                    minDetectionConfidence: 0.5,  // Lowered for better detection
+                    minTrackingConfidence: 0.4    // Lowered for smoother tracking
                 });
 
                 this.latestResults = null;
@@ -422,6 +422,30 @@
                 this.ctx.globalAlpha = pulse;
                 
                 this.ctx.fillText(message, x, y);
+                this.ctx.restore();
+            }
+
+            drawDebugInfo(handsData) {
+                if (!handsData || !handsData.multiHandLandmarks) return;
+                
+                this.ctx.save();
+                this.ctx.font = '14px monospace';
+                this.ctx.fillStyle = '#fff';
+                
+                let y = this.canvas.height - 60;
+                for (let i = 0; i < handsData.multiHandLandmarks.length; i++) {
+                    const handedness = handsData.multiHandedness[i];
+                    const landmarks = handsData.multiHandLandmarks[i];
+                    const thumbTip = landmarks[4];
+                    const indexTip = landmarks[8];
+                    const dx = thumbTip.x - indexTip.x;
+                    const dy = thumbTip.y - indexTip.y;
+                    const dist = Math.sqrt(dx*dx + dy*dy).toFixed(3);
+                    
+                    const info = `Hand ${i}: ${handedness.label} (${(handedness.score * 100).toFixed(0)}%) | Pinch: ${dist}`;
+                    this.ctx.fillText(info, 20, y);
+                    y += 20;
+                }
                 this.ctx.restore();
             }
         }
@@ -673,10 +697,13 @@
                 if (handsData && handsData.multiHandLandmarks) {
                     for (let i = 0; i < handsData.multiHandLandmarks.length; i++) {
                         const landmarks = handsData.multiHandLandmarks[i];
-                        const handedness = handsData.multiHandedness[i];
                         
-                        // Flip due to mirrored video
-                        const isLeftHand = handedness.label === 'Right';
+                        // Use wrist position to determine left/right instead of unreliable handedness
+                        // In mirrored video: actual left hand appears on right side (higher x)
+                        // Wrist is landmark 0
+                        const wristX = landmarks[0].x;
+                        const isLeftHand = wristX > 0.5; // Right side of video = your left hand
+                        
                         const handState = isLeftHand ? this.leftHand : this.rightHand;
                         
                         if (isLeftHand) leftDetected = true;
@@ -871,8 +898,10 @@
                 if (this.handsData && this.handsData.multiHandLandmarks) {
                     for (let i = 0; i < this.handsData.multiHandLandmarks.length; i++) {
                         const landmarks = this.handsData.multiHandLandmarks[i];
-                        const handedness = this.handsData.multiHandedness[i];
-                        const isLeftHand = handedness.label === 'Right';
+                        
+                        // Use position-based detection (same as gesture detector)
+                        const wristX = landmarks[0].x;
+                        const isLeftHand = wristX > 0.5;
                         
                         const handState = this.gestureDetector.getHandState(isLeftHand);
                         const chargePercent = handState.charge * 100;
@@ -897,6 +926,9 @@
                 if (this.showHandsHint) {
                     this.renderer.drawHint('👋 Show your hands to the camera');
                 }
+
+                // Debug info at bottom of screen
+                this.renderer.drawDebugInfo(this.handsData);
 
                 requestAnimationFrame(() => this.loop());
             }
