@@ -257,6 +257,16 @@
         // RENDERER
         // ============================================
         class Renderer {
+            // Hand landmark connections for drawing skeleton
+            static HAND_CONNECTIONS = [
+                [0, 1], [1, 2], [2, 3], [3, 4],           // Thumb
+                [0, 5], [5, 6], [6, 7], [7, 8],           // Index
+                [0, 9], [9, 10], [10, 11], [11, 12],      // Middle
+                [0, 13], [13, 14], [14, 15], [15, 16],    // Ring
+                [0, 17], [17, 18], [18, 19], [19, 20],    // Pinky
+                [5, 9], [9, 13], [13, 17]                  // Palm
+            ];
+
             constructor(canvas, video) {
                 this.canvas = canvas;
                 this.ctx = canvas.getContext('2d');
@@ -308,6 +318,90 @@
 
                 // Store video bounds for coordinate conversion
                 this.videoBounds = { offsetX, offsetY, drawWidth, drawHeight };
+            }
+
+            convertLandmarkToCanvas(landmark) {
+                if (!this.videoBounds) return { x: 0, y: 0 };
+                
+                const { offsetX, offsetY, drawWidth, drawHeight } = this.videoBounds;
+                
+                // Mirror X coordinate (since video is mirrored)
+                const x = this.canvas.width - (offsetX + landmark.x * drawWidth);
+                const y = offsetY + landmark.y * drawHeight;
+                
+                return { x, y };
+            }
+
+            drawHandSkeleton(landmarks, isLeftHand, chargePercent = 0) {
+                const baseColor = isLeftHand ? '#ff6b6b' : '#4ecdc4';
+                const glowIntensity = chargePercent / 100;
+
+                // Draw connections
+                this.ctx.strokeStyle = baseColor;
+                this.ctx.lineWidth = 3;
+                this.ctx.lineCap = 'round';
+
+                // Add glow effect
+                if (glowIntensity > 0) {
+                    this.ctx.shadowColor = baseColor;
+                    this.ctx.shadowBlur = 10 + glowIntensity * 20;
+                }
+
+                for (const [start, end] of Renderer.HAND_CONNECTIONS) {
+                    const startPoint = this.convertLandmarkToCanvas(landmarks[start]);
+                    const endPoint = this.convertLandmarkToCanvas(landmarks[end]);
+
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(startPoint.x, startPoint.y);
+                    this.ctx.lineTo(endPoint.x, endPoint.y);
+                    this.ctx.stroke();
+                }
+
+                // Draw landmarks
+                for (let i = 0; i < landmarks.length; i++) {
+                    const point = this.convertLandmarkToCanvas(landmarks[i]);
+                    
+                    this.ctx.beginPath();
+                    this.ctx.arc(point.x, point.y, 5, 0, Math.PI * 2);
+                    this.ctx.fillStyle = baseColor;
+                    this.ctx.fill();
+                }
+
+                // Reset shadow
+                this.ctx.shadowBlur = 0;
+            }
+
+            drawPinchIndicator(thumbTip, indexTip, isCharging) {
+                const thumb = this.convertLandmarkToCanvas(thumbTip);
+                const index = this.convertLandmarkToCanvas(indexTip);
+
+                // Draw circles around thumb and index
+                const color = isCharging ? '#ffd93d' : '#ffffff';
+                
+                this.ctx.strokeStyle = color;
+                this.ctx.lineWidth = 3;
+                this.ctx.shadowColor = color;
+                this.ctx.shadowBlur = isCharging ? 15 : 5;
+
+                // Thumb circle
+                this.ctx.beginPath();
+                this.ctx.arc(thumb.x, thumb.y, 15, 0, Math.PI * 2);
+                this.ctx.stroke();
+
+                // Index circle
+                this.ctx.beginPath();
+                this.ctx.arc(index.x, index.y, 15, 0, Math.PI * 2);
+                this.ctx.stroke();
+
+                // Line between them when charging
+                if (isCharging) {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(thumb.x, thumb.y);
+                    this.ctx.lineTo(index.x, index.y);
+                    this.ctx.stroke();
+                }
+
+                this.ctx.shadowBlur = 0;
             }
         }
 
@@ -368,9 +462,23 @@
                 this.renderer.clear();
                 this.renderer.drawVideo();
 
-                // Log hand data for debugging
+                // Draw hand skeletons
                 if (this.handsData && this.handsData.multiHandLandmarks) {
-                    console.log(`Detected ${this.handsData.multiHandLandmarks.length} hand(s)`);
+                    for (let i = 0; i < this.handsData.multiHandLandmarks.length; i++) {
+                        const landmarks = this.handsData.multiHandLandmarks[i];
+                        const handedness = this.handsData.multiHandedness[i];
+                        
+                        // MediaPipe reports handedness from camera's perspective
+                        // Since we mirror the video, we flip the label
+                        const isLeftHand = handedness.label === 'Right';
+                        
+                        this.renderer.drawHandSkeleton(landmarks, isLeftHand, 0);
+                        this.renderer.drawPinchIndicator(
+                            landmarks[4],  // Thumb tip
+                            landmarks[8],  // Index tip
+                            false
+                        );
+                    }
                 }
 
                 requestAnimationFrame(() => this.loop());
