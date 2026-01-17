@@ -403,6 +403,100 @@
 
                 this.ctx.shadowBlur = 0;
             }
+
+            drawParticles(particleSystem) {
+                particleSystem.draw(this.ctx);
+            }
+        }
+
+        // ============================================
+        // PARTICLE SYSTEM
+        // ============================================
+        class ParticleSystem {
+            constructor() {
+                this.particles = [];
+                this.gravity = 0.15;
+                this.maxParticles = 500;
+
+                this.palettes = [
+                    ['#ff006e', '#fb5607', '#ffbe0b', '#ff006e'],  // Warm
+                    ['#00f5d4', '#00bbf9', '#9b5de5', '#00f5d4'],  // Cool
+                    ['#ff006e', '#8338ec', '#3a86ff', '#ff006e'],  // Neon
+                    ['#06d6a0', '#118ab2', '#073b4c', '#ffd166'],  // Ocean
+                ];
+            }
+
+            createFirework(x, y, charge) {
+                const particleCount = Math.floor(80 + charge * 70);
+                const palette = this.palettes[Math.floor(Math.random() * this.palettes.length)];
+                const baseSpeed = 3 + charge * 5;
+
+                for (let i = 0; i < particleCount; i++) {
+                    if (this.particles.length >= this.maxParticles) break;
+
+                    const angle = (Math.PI * 2 * i) / particleCount + (Math.random() - 0.5) * 0.5;
+                    const speed = baseSpeed * (0.5 + Math.random() * 0.5);
+
+                    this.particles.push({
+                        x: x,
+                        y: y,
+                        vx: Math.cos(angle) * speed,
+                        vy: Math.sin(angle) * speed,
+                        color: palette[Math.floor(Math.random() * palette.length)],
+                        size: 2 + Math.random() * 3,
+                        life: 1,
+                        decay: 0.01 + Math.random() * 0.015,
+                        gravity: this.gravity * (0.8 + Math.random() * 0.4)
+                    });
+                }
+            }
+
+            update() {
+                for (let i = this.particles.length - 1; i >= 0; i--) {
+                    const p = this.particles[i];
+
+                    // Update position
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.vy += p.gravity;
+
+                    // Apply drag
+                    p.vx *= 0.98;
+                    p.vy *= 0.98;
+
+                    // Decrease life
+                    p.life -= p.decay;
+                    p.size *= 0.98;
+
+                    // Remove dead particles
+                    if (p.life <= 0 || p.size < 0.5) {
+                        this.particles.splice(i, 1);
+                    }
+                }
+            }
+
+            draw(ctx) {
+                ctx.save();
+                
+                for (const p of this.particles) {
+                    ctx.globalAlpha = p.life;
+                    ctx.fillStyle = p.color;
+                    
+                    // Draw with glow
+                    ctx.shadowColor = p.color;
+                    ctx.shadowBlur = 10;
+                    
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                
+                ctx.restore();
+            }
+
+            clear() {
+                this.particles = [];
+            }
         }
 
         // ============================================
@@ -522,6 +616,7 @@
                 this.renderer = new Renderer(this.canvas, this.video);
                 this.handTracker = new HandTracker();
                 this.gestureDetector = new GestureDetector();
+                this.particleSystem = new ParticleSystem();
 
                 this.isRunning = false;
                 this.handsData = null;
@@ -588,10 +683,17 @@
                 // Update gesture detection
                 const events = this.gestureDetector.update(this.handsData);
 
-                // Handle events (fireworks - implemented in next task)
+                // Handle firework events
                 for (const event of events) {
-                    console.log('Firework triggered!', event.hand, 'charge:', event.charge);
+                    if (event.type === 'firework') {
+                        // Convert normalized position to canvas coordinates
+                        const canvasPos = this.renderer.convertLandmarkToCanvas(event.position);
+                        this.particleSystem.createFirework(canvasPos.x, canvasPos.y, event.charge);
+                    }
                 }
+
+                // Update particles
+                this.particleSystem.update();
 
                 this.renderer.clear();
                 this.renderer.drawVideo();
@@ -614,6 +716,9 @@
                         );
                     }
                 }
+
+                // Draw particles on top
+                this.renderer.drawParticles(this.particleSystem);
 
                 // Update UI
                 this.updateUI();
