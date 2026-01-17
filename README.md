@@ -2,7 +2,7 @@
 
 Create stunning fireworks with hand gestures using your webcam! Features real-time hand tracking, colorful particle explosions with trails & glow effects, synthesized sound effects, and background music.
 
-**Pinch your fingers to charge, release to launch!**
+**Right hand for instant explosions, left hand for ground-launched rockets!**
 
 ## 🚀 [Live Demo](https://michaelguo.vercel.app/fireworks/)
 
@@ -13,19 +13,20 @@ Create stunning fireworks with hand gestures using your webcam! Features real-ti
 - 🖐️ **Real-time hand tracking** - Uses MediaPipe Hands for accurate gesture detection
 - 🎨 **8 vibrant color palettes** - Golden, Electric Blue, Pink Paradise, Green Aurora, Purple Galaxy, Rainbow, Fire Storm, Ice Crystal
 - ✨ **Advanced particle effects** - Trails, sparkles, glow, additive blending
-- 🔊 **Synthesized sound effects** - Explosion pops with sparkle sounds
+- 🚀 **Two firework modes** - Instant explosions OR ground-launched rockets with ignition sequence
+- 🔊 **Synthesized sound effects** - Ignition fuse, rocket whoosh, explosion pops with sparkles
 - 🎵 **Background music** - Immersive audio experience
 - 📱 **Works on mobile** - Use your phone's front camera
-- 🚀 **No installation** - Runs directly in the browser
+- 🌐 **No installation** - Runs directly in the browser
 
 ## 🎮 How to Use
 
 1. Open the app in a modern browser
 2. Click anywhere to start
 3. Allow camera access when prompted
-4. **Pinch** your thumb and index finger together to charge
-5. **Release** to launch fireworks!
-6. Use both hands for double the fun! 🎆🎆
+4. **Right hand pinch** - Instant explosion at your fingertips! ✨
+5. **Left hand pinch** - Launch a rocket from the ground with ignition sequence! 🚀
+6. Use both hands for different effects simultaneously! 🎆🚀
 
 ## 🛠️ Tech Stack
 
