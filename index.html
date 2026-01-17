@@ -432,8 +432,8 @@
         class ParticleSystem {
             constructor() {
                 this.particles = [];
-                this.gravity = 0.15;
-                this.maxParticles = 500;
+                this.gravity = 0.12;
+                this.maxParticles = 1000;
 
                 this.palettes = [
                     ['#ff006e', '#fb5607', '#ffbe0b', '#ff006e'],  // Warm
@@ -444,15 +444,15 @@
             }
 
             createFirework(x, y, charge) {
-                const particleCount = Math.floor(80 + charge * 70);
+                const particleCount = Math.floor(150 + charge * 150);
                 const palette = this.palettes[Math.floor(Math.random() * this.palettes.length)];
-                const baseSpeed = 3 + charge * 5;
+                const baseSpeed = 8 + charge * 12;
 
                 for (let i = 0; i < particleCount; i++) {
                     if (this.particles.length >= this.maxParticles) break;
 
-                    const angle = (Math.PI * 2 * i) / particleCount + (Math.random() - 0.5) * 0.5;
-                    const speed = baseSpeed * (0.5 + Math.random() * 0.5);
+                    const angle = (Math.PI * 2 * i) / particleCount + (Math.random() - 0.5) * 0.8;
+                    const speed = baseSpeed * (0.4 + Math.random() * 0.6);
 
                     this.particles.push({
                         x: x,
@@ -460,10 +460,10 @@
                         vx: Math.cos(angle) * speed,
                         vy: Math.sin(angle) * speed,
                         color: palette[Math.floor(Math.random() * palette.length)],
-                        size: 2 + Math.random() * 3,
+                        size: 4 + Math.random() * 6,
                         life: 1,
-                        decay: 0.01 + Math.random() * 0.015,
-                        gravity: this.gravity * (0.8 + Math.random() * 0.4)
+                        decay: 0.008 + Math.random() * 0.012,
+                        gravity: this.gravity * (0.6 + Math.random() * 0.4)
                     });
                 }
             }
@@ -633,9 +633,9 @@
         // ============================================
         class GestureDetector {
             constructor() {
-                this.PINCH_THRESHOLD = 0.08; // Normalized distance
-                this.CHARGE_RATE = 0.02;     // Charge per frame
-                this.MIN_CHARGE = 0.2;       // Minimum to trigger firework
+                this.PINCH_THRESHOLD = 0.10; // Normalized distance (increased for better detection)
+                this.CHARGE_RATE = 0.025;    // Charge per frame (faster charging)
+                this.MIN_CHARGE = 0.15;      // Minimum to trigger firework (lower threshold)
 
                 this.leftHand = { charging: false, charge: 0, wasPinching: false };
                 this.rightHand = { charging: false, charge: 0, wasPinching: false };
@@ -851,18 +851,6 @@
 
                 // Update gesture detection
                 const events = this.gestureDetector.update(this.handsData);
-
-                // Handle charge sounds
-                for (const hand of ['left', 'right']) {
-                    const state = hand === 'left' ? this.gestureDetector.leftHand : this.gestureDetector.rightHand;
-                    
-                    if (state.charging && state.charge > 0.05) {
-                        this.audioManager.playCharge(hand);
-                        this.audioManager.updateChargeIntensity(hand, state.charge);
-                    } else {
-                        this.audioManager.stopCharge(hand);
-                    }
-                }
 
                 // Handle firework events
                 for (const event of events) {
