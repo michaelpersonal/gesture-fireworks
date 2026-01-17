@@ -407,6 +407,23 @@
             drawParticles(particleSystem) {
                 particleSystem.draw(this.ctx);
             }
+
+            drawHint(message) {
+                const x = this.canvas.width / 2;
+                const y = this.canvas.height / 2 + 100;
+
+                this.ctx.save();
+                this.ctx.font = '24px -apple-system, BlinkMacSystemFont, sans-serif';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                
+                // Pulsing animation
+                const pulse = 0.7 + 0.3 * Math.sin(Date.now() / 300);
+                this.ctx.globalAlpha = pulse;
+                
+                this.ctx.fillText(message, x, y);
+                this.ctx.restore();
+            }
         }
 
         // ============================================
@@ -734,6 +751,13 @@
                 this.isRunning = false;
                 this.handsData = null;
 
+                // For hints and performance
+                this.lastHandsDetectedTime = 0;
+                this.showHandsHint = false;
+                this.frameCount = 0;
+                this.lastFpsUpdate = 0;
+                this.fps = 60;
+
                 this.setupEventListeners();
             }
 
@@ -758,6 +782,20 @@
 
                 updateHand(leftStatus, this.gestureDetector.leftHand, 'Left hand');
                 updateHand(rightStatus, this.gestureDetector.rightHand, 'Right hand');
+            }
+
+            checkHandsHint() {
+                const now = Date.now();
+                const hasHands = this.handsData && 
+                                this.handsData.multiHandLandmarks && 
+                                this.handsData.multiHandLandmarks.length > 0;
+
+                if (hasHands) {
+                    this.lastHandsDetectedTime = now;
+                    this.showHandsHint = false;
+                } else if (now - this.lastHandsDetectedTime > 3000) {
+                    this.showHandsHint = true;
+                }
             }
 
             setupEventListeners() {
@@ -787,11 +825,26 @@
                 this.renderer.resize();
                 this.uiOverlay.classList.add('visible');
                 this.isRunning = true;
+                this.lastHandsDetectedTime = Date.now();
                 this.loop();
             }
 
             async loop() {
                 if (!this.isRunning) return;
+
+                // FPS tracking
+                this.frameCount++;
+                const now = Date.now();
+                if (now - this.lastFpsUpdate > 1000) {
+                    this.fps = this.frameCount;
+                    this.frameCount = 0;
+                    this.lastFpsUpdate = now;
+                    
+                    // Reduce particles if performance is poor
+                    if (this.fps < 30) {
+                        this.particleSystem.maxParticles = Math.max(200, this.particleSystem.maxParticles - 50);
+                    }
+                }
 
                 // Send frame to hand tracker
                 await this.handTracker.detectHands(this.video);
@@ -850,6 +903,12 @@
 
                 // Update UI
                 this.updateUI();
+
+                // Check and show hands hint
+                this.checkHandsHint();
+                if (this.showHandsHint) {
+                    this.renderer.drawHint('👋 Show your hands to the camera');
+                }
 
                 requestAnimationFrame(() => this.loop());
             }
