@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gesture Fireworks</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #000;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        #container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #video {
+            display: none;
+        }
+
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        #start-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            cursor: pointer;
+            z-index: 10;
+        }
+
+        #start-screen h1 {
+            font-size: 3rem;
+            color: #fff;
+            margin-bottom: 1rem;
+        }
+
+        #start-screen p {
+            font-size: 1.2rem;
+            color: #888;
+        }
+
+        #start-screen.hidden {
+            display: none;
+        }
+
+        #ui-overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px 20px;
+            border-radius: 10px;
+            color: #fff;
+            z-index: 5;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        #ui-overlay.visible {
+            opacity: 1;
+        }
+
+        #ui-overlay h2 {
+            font-size: 1.2rem;
+            margin-bottom: 10px;
+        }
+
+        #ui-overlay .status {
+            font-size: 0.9rem;
+            margin-bottom: 5px;
+        }
+
+        #ui-overlay .hint {
+            font-size: 0.8rem;
+            color: #888;
+            margin-top: 10px;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-indicator.waiting {
+            background: #666;
+        }
+
+        .status-indicator.charging {
+            background: #ff6b6b;
+            animation: pulse 0.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.3); opacity: 0.7; }
+        }
+
+        #error-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 0, 0, 0.2);
+            border: 1px solid #ff6b6b;
+            padding: 20px 30px;
+            border-radius: 10px;
+            color: #fff;
+            text-align: center;
+            z-index: 20;
+            display: none;
+        }
+
+        #error-message.visible {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <video id="video" playsinline></video>
+        <canvas id="canvas"></canvas>
+        
+        <div id="start-screen">
+            <h1>🎆 Gesture Fireworks</h1>
+            <p>Click anywhere to start</p>
+        </div>
+
+        <div id="ui-overlay">
+            <h2>🎆 Gesture Fireworks</h2>
+            <div class="status" id="left-hand-status">
+                <span class="status-indicator waiting"></span>
+                Left hand: Waiting
+            </div>
+            <div class="status" id="right-hand-status">
+                <span class="status-indicator waiting"></span>
+                Right hand: Waiting
+            </div>
+            <div class="hint">Pinch and release to launch fireworks</div>
+        </div>
+
+        <div id="error-message">
+            <p>Camera access needed for hand tracking</p>
+            <p style="margin-top: 10px; font-size: 0.9rem; color: #888;">Please allow camera access and refresh</p>
+        </div>
+    </div>
+
+    <script>
+        // App will be implemented in subsequent tasks
+        console.log('Gesture Fireworks - Ready for implementation');
+    </script>
+</body>
+</html>
