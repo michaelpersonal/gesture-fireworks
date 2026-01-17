@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gesture Fireworks</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862/camera_utils.min.js" crossorigin="anonymous"></script>
     <style>
         * {
             margin: 0;
@@ -206,6 +208,52 @@
         }
 
         // ============================================
+        // HAND TRACKER
+        // ============================================
+        class HandTracker {
+            constructor() {
+                this.hands = new Hands({
+                    locateFile: (file) => {
+                        return `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}`;
+                    }
+                });
+
+                this.hands.setOptions({
+                    maxNumHands: 2,
+                    modelComplexity: 1,
+                    minDetectionConfidence: 0.7,
+                    minTrackingConfidence: 0.5
+                });
+
+                this.latestResults = null;
+                this.onResultsCallback = null;
+            }
+
+            async initialize() {
+                return new Promise((resolve) => {
+                    this.hands.onResults((results) => {
+                        this.latestResults = results;
+                        if (this.onResultsCallback) {
+                            this.onResultsCallback(results);
+                        }
+                    });
+                    this.hands.initialize().then(() => {
+                        console.log('MediaPipe Hands initialized');
+                        resolve();
+                    });
+                });
+            }
+
+            async detectHands(video) {
+                await this.hands.send({ image: video });
+            }
+
+            onResults(callback) {
+                this.onResultsCallback = callback;
+            }
+        }
+
+        // ============================================
         // RENDERER
         // ============================================
         class Renderer {
@@ -276,8 +324,10 @@
 
                 this.camera = new CameraManager(this.video);
                 this.renderer = new Renderer(this.canvas, this.video);
+                this.handTracker = new HandTracker();
 
                 this.isRunning = false;
+                this.handsData = null;
 
                 this.setupEventListeners();
             }
@@ -289,6 +339,13 @@
 
             async start() {
                 this.startScreen.classList.add('hidden');
+
+                // Initialize hand tracker
+                await this.handTracker.initialize();
+
+                this.handTracker.onResults((results) => {
+                    this.handsData = results;
+                });
 
                 const success = await this.camera.start();
                 if (!success) {
@@ -302,11 +359,19 @@
                 this.loop();
             }
 
-            loop() {
+            async loop() {
                 if (!this.isRunning) return;
+
+                // Send frame to hand tracker
+                await this.handTracker.detectHands(this.video);
 
                 this.renderer.clear();
                 this.renderer.drawVideo();
+
+                // Log hand data for debugging
+                if (this.handsData && this.handsData.multiHandLandmarks) {
+                    console.log(`Detected ${this.handsData.multiHandLandmarks.length} hand(s)`);
+                }
 
                 requestAnimationFrame(() => this.loop());
             }
