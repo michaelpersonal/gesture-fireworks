@@ -170,8 +170,150 @@
     </div>
 
     <script>
-        // App will be implemented in subsequent tasks
-        console.log('Gesture Fireworks - Ready for implementation');
+        // ============================================
+        // CAMERA MANAGER
+        // ============================================
+        class CameraManager {
+            constructor(videoElement) {
+                this.video = videoElement;
+                this.stream = null;
+            }
+
+            async start() {
+                try {
+                    this.stream = await navigator.mediaDevices.getUserMedia({
+                        video: {
+                            facingMode: 'user',
+                            width: { ideal: 1280 },
+                            height: { ideal: 720 }
+                        }
+                    });
+                    this.video.srcObject = this.stream;
+                    await this.video.play();
+                    return true;
+                } catch (error) {
+                    console.error('Camera error:', error);
+                    return false;
+                }
+            }
+
+            getVideoDimensions() {
+                return {
+                    width: this.video.videoWidth,
+                    height: this.video.videoHeight
+                };
+            }
+        }
+
+        // ============================================
+        // RENDERER
+        // ============================================
+        class Renderer {
+            constructor(canvas, video) {
+                this.canvas = canvas;
+                this.ctx = canvas.getContext('2d');
+                this.video = video;
+            }
+
+            resize() {
+                this.canvas.width = window.innerWidth;
+                this.canvas.height = window.innerHeight;
+            }
+
+            clear() {
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+            }
+
+            drawVideo() {
+                const { width, height } = this.canvas;
+                const videoAspect = this.video.videoWidth / this.video.videoHeight;
+                const canvasAspect = width / height;
+
+                let drawWidth, drawHeight, offsetX, offsetY;
+
+                if (canvasAspect > videoAspect) {
+                    drawWidth = width;
+                    drawHeight = width / videoAspect;
+                    offsetX = 0;
+                    offsetY = (height - drawHeight) / 2;
+                } else {
+                    drawHeight = height;
+                    drawWidth = height * videoAspect;
+                    offsetX = (width - drawWidth) / 2;
+                    offsetY = 0;
+                }
+
+                // Save context state
+                this.ctx.save();
+                
+                // Mirror the video horizontally
+                this.ctx.translate(width, 0);
+                this.ctx.scale(-1, 1);
+
+                // Draw dimmed video
+                this.ctx.globalAlpha = 0.7;
+                this.ctx.drawImage(this.video, offsetX, offsetY, drawWidth, drawHeight);
+                this.ctx.globalAlpha = 1.0;
+
+                // Restore context
+                this.ctx.restore();
+
+                // Store video bounds for coordinate conversion
+                this.videoBounds = { offsetX, offsetY, drawWidth, drawHeight };
+            }
+        }
+
+        // ============================================
+        // MAIN APP
+        // ============================================
+        class GestureFireworksApp {
+            constructor() {
+                this.video = document.getElementById('video');
+                this.canvas = document.getElementById('canvas');
+                this.startScreen = document.getElementById('start-screen');
+                this.uiOverlay = document.getElementById('ui-overlay');
+                this.errorMessage = document.getElementById('error-message');
+
+                this.camera = new CameraManager(this.video);
+                this.renderer = new Renderer(this.canvas, this.video);
+
+                this.isRunning = false;
+
+                this.setupEventListeners();
+            }
+
+            setupEventListeners() {
+                this.startScreen.addEventListener('click', () => this.start());
+                window.addEventListener('resize', () => this.renderer.resize());
+            }
+
+            async start() {
+                this.startScreen.classList.add('hidden');
+
+                const success = await this.camera.start();
+                if (!success) {
+                    this.errorMessage.classList.add('visible');
+                    return;
+                }
+
+                this.renderer.resize();
+                this.uiOverlay.classList.add('visible');
+                this.isRunning = true;
+                this.loop();
+            }
+
+            loop() {
+                if (!this.isRunning) return;
+
+                this.renderer.clear();
+                this.renderer.drawVideo();
+
+                requestAnimationFrame(() => this.loop());
+            }
+        }
+
+        // Initialize app
+        const app = new GestureFireworksApp();
     </script>
 </body>
 </html>
