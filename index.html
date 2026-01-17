@@ -165,7 +165,7 @@
                 <span class="status-indicator waiting"></span>
                 Right hand: Waiting
             </div>
-            <div class="hint">Pinch and release to launch fireworks</div>
+            <div class="hint">Pinch & release OR swipe up to launch fireworks</div>
         </div>
 
         <div id="error-message">
@@ -461,6 +461,7 @@
                 this.particles = [];
                 this.trails = [];
                 this.sparkles = [];
+                this.rockets = [];  // New: rockets that fly up before exploding
                 this.gravity = 0.08;
                 this.maxParticles = 2000;
 
@@ -500,8 +501,28 @@
                 return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
             }
 
-            createFirework(x, y, charge) {
+            // Launch a rocket that will fly up and explode
+            launchRocket(x, y, velocity) {
                 const palette = this.palettes[Math.floor(Math.random() * this.palettes.length)];
+                const colorHex = palette[Math.floor(Math.random() * palette.length)];
+                
+                this.rockets.push({
+                    x: x,
+                    y: y,
+                    vx: (Math.random() - 0.5) * 2, // Slight horizontal wobble
+                    vy: -12 - velocity * 100,      // Strong upward velocity
+                    color: colorHex,
+                    colorRgb: this.hexToRgb(colorHex),
+                    palette: palette,
+                    size: 4,
+                    life: 1,
+                    explodeHeight: y - (150 + Math.random() * 200), // Explode at this Y
+                    trail: []
+                });
+            }
+
+            createFirework(x, y, charge, customPalette = null) {
+                const palette = customPalette || this.palettes[Math.floor(Math.random() * this.palettes.length)];
                 
                 // Main burst particles
                 const mainCount = Math.floor(200 + charge * 200);
@@ -582,6 +603,39 @@
             }
 
             update() {
+                // Update rockets
+                for (let i = this.rockets.length - 1; i >= 0; i--) {
+                    const r = this.rockets[i];
+                    
+                    // Add trail
+                    r.trail.push({ x: r.x, y: r.y, life: 1 });
+                    if (r.trail.length > 15) r.trail.shift();
+                    
+                    // Update trail life
+                    for (const t of r.trail) {
+                        t.life -= 0.1;
+                    }
+                    r.trail = r.trail.filter(t => t.life > 0);
+                    
+                    // Update position
+                    r.x += r.vx;
+                    r.y += r.vy;
+                    r.vy += 0.15; // Gravity slows the rocket
+                    
+                    // Check if rocket should explode
+                    if (r.y <= r.explodeHeight || r.vy >= 0) {
+                        // Explode!
+                        this.createFirework(r.x, r.y, 0.8, r.palette);
+                        this.rockets.splice(i, 1);
+                        continue;
+                    }
+                    
+                    r.life -= 0.005;
+                    if (r.life <= 0) {
+                        this.rockets.splice(i, 1);
+                    }
+                }
+
                 // Update main particles
                 for (let i = this.particles.length - 1; i >= 0; i--) {
                     const p = this.particles[i];
@@ -650,6 +704,30 @@
                 // Use additive blending for glow effect
                 ctx.globalCompositeOperation = 'lighter';
 
+                // Draw rockets and their trails
+                for (const r of this.rockets) {
+                    // Draw rocket trail
+                    for (let i = 0; i < r.trail.length; i++) {
+                        const t = r.trail[i];
+                        const alpha = t.life * 0.8;
+                        const size = 3 * (i / r.trail.length);
+                        ctx.fillStyle = this.rgbaString(r.colorRgb, alpha);
+                        ctx.beginPath();
+                        ctx.arc(t.x, t.y, size, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                    
+                    // Draw rocket head with glow
+                    const gradient = ctx.createRadialGradient(r.x, r.y, 0, r.x, r.y, r.size * 3);
+                    gradient.addColorStop(0, this.rgbaString({r: 255, g: 255, b: 255}, 1));
+                    gradient.addColorStop(0.3, this.rgbaString(r.colorRgb, 0.8));
+                    gradient.addColorStop(1, this.rgbaString(r.colorRgb, 0));
+                    ctx.fillStyle = gradient;
+                    ctx.beginPath();
+                    ctx.arc(r.x, r.y, r.size * 3, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
                 // Draw trails first (behind particles)
                 for (const t of this.trails) {
                     const alpha = t.life * 0.6;
@@ -708,6 +786,7 @@
                 this.particles = [];
                 this.trails = [];
                 this.sparkles = [];
+                this.rockets = [];
             }
         }
 
@@ -846,9 +925,25 @@
                 this.PINCH_THRESHOLD = 0.10; // Normalized distance (increased for better detection)
                 this.CHARGE_RATE = 0.025;    // Charge per frame (faster charging)
                 this.MIN_CHARGE = 0.15;      // Minimum to trigger firework (lower threshold)
+                
+                // Swipe detection settings
+                this.SWIPE_VELOCITY_THRESHOLD = 0.025; // Minimum upward velocity to trigger launch
+                this.POSITION_HISTORY_LENGTH = 5;      // Frames to track for velocity calculation
 
-                this.leftHand = { charging: false, charge: 0, wasPinching: false };
-                this.rightHand = { charging: false, charge: 0, wasPinching: false };
+                this.leftHand = { 
+                    charging: false, 
+                    charge: 0, 
+                    wasPinching: false,
+                    positionHistory: [],
+                    lastY: null
+                };
+                this.rightHand = { 
+                    charging: false, 
+                    charge: 0, 
+                    wasPinching: false,
+                    positionHistory: [],
+                    lastY: null
+                };
             }
 
             calculatePinchDistance(landmarks) {
@@ -873,6 +968,45 @@
                 };
             }
 
+            // Calculate upward velocity from position history
+            calculateUpwardVelocity(handState, currentY) {
+                handState.positionHistory.push(currentY);
+                
+                // Keep only recent positions
+                if (handState.positionHistory.length > this.POSITION_HISTORY_LENGTH) {
+                    handState.positionHistory.shift();
+                }
+                
+                // Need at least 2 positions to calculate velocity
+                if (handState.positionHistory.length < 2) {
+                    return 0;
+                }
+                
+                // Calculate average velocity (negative Y = moving up in screen coords)
+                const oldest = handState.positionHistory[0];
+                const newest = handState.positionHistory[handState.positionHistory.length - 1];
+                const velocity = oldest - newest; // Positive = moving up
+                
+                return velocity;
+            }
+
+            // Check if hand is in "open palm" position (not pinching, fingers spread)
+            isOpenPalm(landmarks) {
+                // Check if fingers are relatively extended by comparing fingertip Y to palm Y
+                const wrist = landmarks[0];
+                const indexTip = landmarks[8];
+                const middleTip = landmarks[12];
+                
+                // Fingers should be above (lower Y) the wrist when palm is open and facing camera
+                const fingersExtended = indexTip.y < wrist.y && middleTip.y < wrist.y;
+                
+                // Also check pinch is NOT active
+                const pinchDist = this.calculatePinchDistance(landmarks);
+                const notPinching = pinchDist > this.PINCH_THRESHOLD * 1.5;
+                
+                return fingersExtended && notPinching;
+            }
+
             update(handsData) {
                 const events = [];
 
@@ -888,6 +1022,7 @@
                         // In mirrored video: actual left hand appears on right side (higher x)
                         // Wrist is landmark 0
                         const wristX = landmarks[0].x;
+                        const wristY = landmarks[0].y;
                         const isLeftHand = wristX > 0.5; // Right side of video = your left hand
                         
                         const handState = isLeftHand ? this.leftHand : this.rightHand;
@@ -897,6 +1032,24 @@
 
                         const pinchDistance = this.calculatePinchDistance(landmarks);
                         const isPinching = pinchDistance < this.PINCH_THRESHOLD;
+
+                        // Check for swipe-up launch gesture (open palm moving up quickly)
+                        const upwardVelocity = this.calculateUpwardVelocity(handState, wristY);
+                        const isOpenPalm = this.isOpenPalm(landmarks);
+                        
+                        if (isOpenPalm && upwardVelocity > this.SWIPE_VELOCITY_THRESHOLD && !handState.launchCooldown) {
+                            // Launch a rocket!
+                            events.push({
+                                type: 'launch',
+                                hand: isLeftHand ? 'left' : 'right',
+                                position: { x: wristX, y: wristY },
+                                velocity: upwardVelocity,
+                                landmarks: landmarks
+                            });
+                            // Cooldown to prevent multiple launches
+                            handState.launchCooldown = true;
+                            setTimeout(() => { handState.launchCooldown = false; }, 500);
+                        }
 
                         if (isPinching) {
                             // Charging
@@ -928,11 +1081,13 @@
                     this.leftHand.charging = false;
                     this.leftHand.charge = 0;
                     this.leftHand.wasPinching = false;
+                    this.leftHand.positionHistory = [];
                 }
                 if (!rightDetected) {
                     this.rightHand.charging = false;
                     this.rightHand.charge = 0;
                     this.rightHand.wasPinching = false;
+                    this.rightHand.positionHistory = [];
                 }
 
                 return events;
@@ -1086,6 +1241,12 @@
                         const canvasPos = this.renderer.convertLandmarkToCanvas(event.position);
                         this.particleSystem.createFirework(canvasPos.x, canvasPos.y, event.charge);
                         this.audioManager.playExplosion(event.charge);
+                    } else if (event.type === 'launch') {
+                        // Launch a rocket from hand position
+                        const canvasPos = this.renderer.convertLandmarkToCanvas(event.position);
+                        this.particleSystem.launchRocket(canvasPos.x, canvasPos.y, event.velocity);
+                        // Play a softer launch sound
+                        this.audioManager.playExplosion(0.3);
                     }
                 }
 
