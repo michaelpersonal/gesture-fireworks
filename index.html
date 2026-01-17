@@ -406,6 +406,108 @@
         }
 
         // ============================================
+        // GESTURE DETECTOR
+        // ============================================
+        class GestureDetector {
+            constructor() {
+                this.PINCH_THRESHOLD = 0.08; // Normalized distance
+                this.CHARGE_RATE = 0.02;     // Charge per frame
+                this.MIN_CHARGE = 0.2;       // Minimum to trigger firework
+
+                this.leftHand = { charging: false, charge: 0, wasPinching: false };
+                this.rightHand = { charging: false, charge: 0, wasPinching: false };
+            }
+
+            calculatePinchDistance(landmarks) {
+                const thumbTip = landmarks[4];
+                const indexTip = landmarks[8];
+                
+                const dx = thumbTip.x - indexTip.x;
+                const dy = thumbTip.y - indexTip.y;
+                const dz = thumbTip.z - indexTip.z;
+                
+                return Math.sqrt(dx * dx + dy * dy + dz * dz);
+            }
+
+            getPinchPosition(landmarks) {
+                const thumbTip = landmarks[4];
+                const indexTip = landmarks[8];
+                
+                return {
+                    x: (thumbTip.x + indexTip.x) / 2,
+                    y: (thumbTip.y + indexTip.y) / 2,
+                    z: (thumbTip.z + indexTip.z) / 2
+                };
+            }
+
+            update(handsData) {
+                const events = [];
+
+                // Reset tracking for hands not detected
+                let leftDetected = false;
+                let rightDetected = false;
+
+                if (handsData && handsData.multiHandLandmarks) {
+                    for (let i = 0; i < handsData.multiHandLandmarks.length; i++) {
+                        const landmarks = handsData.multiHandLandmarks[i];
+                        const handedness = handsData.multiHandedness[i];
+                        
+                        // Flip due to mirrored video
+                        const isLeftHand = handedness.label === 'Right';
+                        const handState = isLeftHand ? this.leftHand : this.rightHand;
+                        
+                        if (isLeftHand) leftDetected = true;
+                        else rightDetected = true;
+
+                        const pinchDistance = this.calculatePinchDistance(landmarks);
+                        const isPinching = pinchDistance < this.PINCH_THRESHOLD;
+
+                        if (isPinching) {
+                            // Charging
+                            handState.charging = true;
+                            handState.charge = Math.min(1, handState.charge + this.CHARGE_RATE);
+                        } else if (handState.wasPinching && handState.charge >= this.MIN_CHARGE) {
+                            // Released with enough charge - fire!
+                            events.push({
+                                type: 'firework',
+                                hand: isLeftHand ? 'left' : 'right',
+                                position: this.getPinchPosition(landmarks),
+                                charge: handState.charge,
+                                landmarks: landmarks
+                            });
+                            handState.charge = 0;
+                            handState.charging = false;
+                        } else {
+                            // Not pinching, decay charge
+                            handState.charge = Math.max(0, handState.charge - this.CHARGE_RATE * 0.5);
+                            handState.charging = false;
+                        }
+
+                        handState.wasPinching = isPinching;
+                    }
+                }
+
+                // Reset hands that are not detected
+                if (!leftDetected) {
+                    this.leftHand.charging = false;
+                    this.leftHand.charge = 0;
+                    this.leftHand.wasPinching = false;
+                }
+                if (!rightDetected) {
+                    this.rightHand.charging = false;
+                    this.rightHand.charge = 0;
+                    this.rightHand.wasPinching = false;
+                }
+
+                return events;
+            }
+
+            getHandState(isLeftHand) {
+                return isLeftHand ? this.leftHand : this.rightHand;
+            }
+        }
+
+        // ============================================
         // MAIN APP
         // ============================================
         class GestureFireworksApp {
@@ -419,11 +521,35 @@
                 this.camera = new CameraManager(this.video);
                 this.renderer = new Renderer(this.canvas, this.video);
                 this.handTracker = new HandTracker();
+                this.gestureDetector = new GestureDetector();
 
                 this.isRunning = false;
                 this.handsData = null;
 
                 this.setupEventListeners();
+            }
+
+            updateUI() {
+                const leftStatus = document.getElementById('left-hand-status');
+                const rightStatus = document.getElementById('right-hand-status');
+
+                const updateHand = (element, state, label) => {
+                    if (state.charging) {
+                        const percent = Math.round(state.charge * 100);
+                        element.innerHTML = `
+                            <span class="status-indicator charging"></span>
+                            ${label}: Charging... ${percent}%
+                        `;
+                    } else {
+                        element.innerHTML = `
+                            <span class="status-indicator waiting"></span>
+                            ${label}: Waiting
+                        `;
+                    }
+                };
+
+                updateHand(leftStatus, this.gestureDetector.leftHand, 'Left hand');
+                updateHand(rightStatus, this.gestureDetector.rightHand, 'Right hand');
             }
 
             setupEventListeners() {
@@ -459,27 +585,38 @@
                 // Send frame to hand tracker
                 await this.handTracker.detectHands(this.video);
 
+                // Update gesture detection
+                const events = this.gestureDetector.update(this.handsData);
+
+                // Handle events (fireworks - implemented in next task)
+                for (const event of events) {
+                    console.log('Firework triggered!', event.hand, 'charge:', event.charge);
+                }
+
                 this.renderer.clear();
                 this.renderer.drawVideo();
 
-                // Draw hand skeletons
+                // Draw hand skeletons with charge effect
                 if (this.handsData && this.handsData.multiHandLandmarks) {
                     for (let i = 0; i < this.handsData.multiHandLandmarks.length; i++) {
                         const landmarks = this.handsData.multiHandLandmarks[i];
                         const handedness = this.handsData.multiHandedness[i];
-                        
-                        // MediaPipe reports handedness from camera's perspective
-                        // Since we mirror the video, we flip the label
                         const isLeftHand = handedness.label === 'Right';
                         
-                        this.renderer.drawHandSkeleton(landmarks, isLeftHand, 0);
+                        const handState = this.gestureDetector.getHandState(isLeftHand);
+                        const chargePercent = handState.charge * 100;
+                        
+                        this.renderer.drawHandSkeleton(landmarks, isLeftHand, chargePercent);
                         this.renderer.drawPinchIndicator(
-                            landmarks[4],  // Thumb tip
-                            landmarks[8],  // Index tip
-                            false
+                            landmarks[4],
+                            landmarks[8],
+                            handState.charging
                         );
                     }
                 }
+
+                // Update UI
+                this.updateUI();
 
                 requestAnimationFrame(() => this.loop());
             }
