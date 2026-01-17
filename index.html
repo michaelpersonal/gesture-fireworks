@@ -500,6 +500,118 @@
         }
 
         // ============================================
+        // AUDIO MANAGER (Synthesized sounds)
+        // ============================================
+        class AudioManager {
+            constructor() {
+                this.audioContext = null;
+                this.initialized = false;
+                this.chargeSources = new Map(); // Track charging sounds per hand
+            }
+
+            async initialize() {
+                if (this.initialized) return;
+                
+                try {
+                    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    this.initialized = true;
+                    console.log('Audio initialized');
+                } catch (error) {
+                    console.warn('Audio not available:', error);
+                }
+            }
+
+            playCharge(handId) {
+                if (!this.audioContext || this.chargeSources.has(handId)) return;
+
+                const oscillator = this.audioContext.createOscillator();
+                const gainNode = this.audioContext.createGain();
+
+                oscillator.type = 'sine';
+                oscillator.frequency.setValueAtTime(100, this.audioContext.currentTime);
+                oscillator.frequency.linearRampToValueAtTime(300, this.audioContext.currentTime + 2);
+
+                gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
+                gainNode.gain.linearRampToValueAtTime(0.15, this.audioContext.currentTime + 0.1);
+
+                oscillator.connect(gainNode);
+                gainNode.connect(this.audioContext.destination);
+
+                oscillator.start();
+
+                this.chargeSources.set(handId, { oscillator, gainNode });
+            }
+
+            stopCharge(handId) {
+                const source = this.chargeSources.get(handId);
+                if (source) {
+                    source.gainNode.gain.linearRampToValueAtTime(0, this.audioContext.currentTime + 0.1);
+                    setTimeout(() => {
+                        source.oscillator.stop();
+                    }, 150);
+                    this.chargeSources.delete(handId);
+                }
+            }
+
+            updateChargeIntensity(handId, charge) {
+                const source = this.chargeSources.get(handId);
+                if (source) {
+                    // Increase volume and pitch with charge
+                    source.gainNode.gain.setValueAtTime(0.1 + charge * 0.2, this.audioContext.currentTime);
+                    source.oscillator.frequency.setValueAtTime(100 + charge * 300, this.audioContext.currentTime);
+                }
+            }
+
+            playExplosion(intensity = 1) {
+                if (!this.audioContext) return;
+
+                // Create noise burst
+                const bufferSize = this.audioContext.sampleRate * 0.3;
+                const buffer = this.audioContext.createBuffer(1, bufferSize, this.audioContext.sampleRate);
+                const data = buffer.getChannelData(0);
+
+                for (let i = 0; i < bufferSize; i++) {
+                    data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.1));
+                }
+
+                const noise = this.audioContext.createBufferSource();
+                noise.buffer = buffer;
+
+                // Filter for more "pop" sound
+                const filter = this.audioContext.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(1000 + intensity * 2000, this.audioContext.currentTime);
+                filter.frequency.linearRampToValueAtTime(200, this.audioContext.currentTime + 0.3);
+
+                const gainNode = this.audioContext.createGain();
+                gainNode.gain.setValueAtTime(0.3 * intensity, this.audioContext.currentTime);
+                gainNode.gain.linearRampToValueAtTime(0, this.audioContext.currentTime + 0.3);
+
+                noise.connect(filter);
+                filter.connect(gainNode);
+                gainNode.connect(this.audioContext.destination);
+
+                noise.start();
+
+                // Add a "sparkle" high frequency
+                const sparkle = this.audioContext.createOscillator();
+                sparkle.type = 'sine';
+                sparkle.frequency.setValueAtTime(2000 + Math.random() * 1000, this.audioContext.currentTime);
+                sparkle.frequency.linearRampToValueAtTime(500, this.audioContext.currentTime + 0.2);
+
+                const sparkleGain = this.audioContext.createGain();
+                sparkleGain.gain.setValueAtTime(0.1 * intensity, this.audioContext.currentTime);
+                sparkleGain.gain.linearRampToValueAtTime(0, this.audioContext.currentTime + 0.2);
+
+                sparkle.connect(sparkleGain);
+                sparkleGain.connect(this.audioContext.destination);
+
+                sparkle.start();
+                sparkle.stop(this.audioContext.currentTime + 0.3);
+            }
+        }
+
+        // ============================================
         // GESTURE DETECTOR
         // ============================================
         class GestureDetector {
@@ -617,6 +729,7 @@
                 this.handTracker = new HandTracker();
                 this.gestureDetector = new GestureDetector();
                 this.particleSystem = new ParticleSystem();
+                this.audioManager = new AudioManager();
 
                 this.isRunning = false;
                 this.handsData = null;
@@ -655,6 +768,9 @@
             async start() {
                 this.startScreen.classList.add('hidden');
 
+                // Initialize audio (requires user interaction)
+                await this.audioManager.initialize();
+
                 // Initialize hand tracker
                 await this.handTracker.initialize();
 
@@ -683,12 +799,24 @@
                 // Update gesture detection
                 const events = this.gestureDetector.update(this.handsData);
 
+                // Handle charge sounds
+                for (const hand of ['left', 'right']) {
+                    const state = hand === 'left' ? this.gestureDetector.leftHand : this.gestureDetector.rightHand;
+                    
+                    if (state.charging && state.charge > 0.05) {
+                        this.audioManager.playCharge(hand);
+                        this.audioManager.updateChargeIntensity(hand, state.charge);
+                    } else {
+                        this.audioManager.stopCharge(hand);
+                    }
+                }
+
                 // Handle firework events
                 for (const event of events) {
                     if (event.type === 'firework') {
-                        // Convert normalized position to canvas coordinates
                         const canvasPos = this.renderer.convertLandmarkToCanvas(event.position);
                         this.particleSystem.createFirework(canvasPos.x, canvasPos.y, event.charge);
+                        this.audioManager.playExplosion(event.charge);
                     }
                 }
 
